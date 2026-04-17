@@ -28,6 +28,16 @@ services:
     env_file:
       - .env
 
+  pricing-agent:
+    build: ../Agents/pricing-agent
+    env_file:
+      - .env
+
+  validation-agent:
+    build: ../Agents/validation-agent
+    env_file:
+      - .env
+
   postgres:
     image: postgres:15
     restart: always
