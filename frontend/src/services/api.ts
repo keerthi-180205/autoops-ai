@@ -11,5 +11,15 @@ export const submitRequest = async (prompt: string) => {
 
 export const fetchStatus = async (id: number) => {
   const response = await axios.get(`${API_URL}/status/${id}`);
-  return response.data; // { id, status, message, logs }
+  return response.data; // { id, status, prompt, message, logs }
+};
+
+export const replyToRequest = async (id: number, answer: string) => {
+  const response = await axios.post(`${API_URL}/request/${id}/reply`, { answer });
+  return response.data; // { id, status, message }
+};
+
+export const fetchHistory = async () => {
+  const response = await axios.get(`${API_URL}/history`);
+  return response.data; // array of past requests
 };

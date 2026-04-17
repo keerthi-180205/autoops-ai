@@ -4,21 +4,27 @@ Port: 8000
 
 Responsibilities:
   - Accept POST /plan from the Backend with a natural-language prompt
-  - Pass the prompt to the LLM with a strict system instruction
-  - Parse and validate the LLM JSON response using Pydantic
-  - Retry once if the first LLM response fails validation
-  - Return a structured PlanResponse JSON to the Backend
+  - If the LLM needs more info → return { status: "needs_clarification", questions }
+  - If the LLM has enough info → return { status: "ready", service, action, parameters }
+  - Accept POST /plan/continue with original prompt + user answers → always return a ready plan
 """
 
 import json
 import logging
+from typing import Union
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from llm.client import call_llm
-from llm.prompts import SYSTEM_PROMPT
-from models.schemas import ErrorResponse, PlanRequest, PlanResponse
+from llm.prompts import SYSTEM_PROMPT, CONTINUE_PROMPT
+from models.schemas import (
+    ClarificationResponse,
+    ContinueRequest,
+    ErrorResponse,
+    PlanRequest,
+    PlanResponse,
+)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -36,9 +42,10 @@ app = FastAPI(
     title="Master Agent",
     description=(
         "AI Planner: converts natural-language AWS instructions into "
-        "strict JSON task configurations for the Worker Agent."
+        "strict JSON task configurations. Asks clarifying questions when "
+        "critical details are missing."
     ),
-    version="1.0.0",
+    version="2.0.0",
 )
 
 app.add_middleware(
@@ -52,15 +59,26 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _parse_and_validate(raw: str) -> PlanResponse:
+def _parse_llm_response(raw: str) -> Union[ClarificationResponse, PlanResponse]:
     """
-    Parse a raw string from the LLM and validate it against PlanResponse.
-    Raises ValueError if the JSON is malformed or schema-invalid.
+    Parse a raw LLM string into either a ClarificationResponse or PlanResponse.
+    Raises ValueError on bad JSON or unknown status.
     """
-    # Strip any accidental markdown backtick fences the model may still output
     cleaned = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
-    data = json.loads(cleaned)  # raises json.JSONDecodeError on bad JSON
-    return PlanResponse(**data)  # raises ValidationError on schema mismatch
+    data = json.loads(cleaned)
+
+    status = data.get("status", "ready")
+
+    if status == "needs_clarification":
+        return ClarificationResponse(**data)
+    elif status == "ready":
+        return PlanResponse(**data)
+    elif status == "error":
+        raise ValueError(data.get("parameters", {}).get("message", "Unknown error from LLM"))
+    else:
+        # Backwards compatibility: if no status field, treat as a ready plan
+        data["status"] = "ready"
+        return PlanResponse(**data)
 
 
 # ---------------------------------------------------------------------------
@@ -72,20 +90,19 @@ def health_check():
     return {"status": "ok", "agent": "master-agent"}
 
 
-@app.post("/plan", response_model=PlanResponse)
+@app.post("/plan")
 def plan(request: PlanRequest):
     """
-    Convert a natural-language prompt into a structured AWS task plan.
+    Convert a natural-language prompt into a structured AWS task plan,
+    or ask clarifying questions if critical details are missing.
 
-    Flow:
-      1. Send prompt + SYSTEM_PROMPT to LLM
-      2. Parse & validate the JSON response
-      3. If validation fails → retry the LLM call once
-      4. If retry also fails → return HTTP 422
+    Returns either:
+      - ClarificationResponse { status, questions }
+      - PlanResponse { status, service, action, parameters }
     """
     logger.info("Received plan request: %s", request.prompt)
 
-    for attempt in range(1, 3):  # max 2 attempts (original + 1 retry)
+    for attempt in range(1, 3):
         try:
             raw_response = call_llm(
                 system_prompt=SYSTEM_PROMPT,
@@ -93,13 +110,13 @@ def plan(request: PlanRequest):
             )
             logger.info("LLM raw response (attempt %d): %s", attempt, raw_response)
 
-            plan_response = _parse_and_validate(raw_response)
-            logger.info("Plan validated successfully: %s", plan_response.model_dump())
-            return plan_response
+            result = _parse_llm_response(raw_response)
+            logger.info("Parsed response: %s", result.model_dump())
+            return result
 
         except (json.JSONDecodeError, ValueError, Exception) as exc:
             logger.warning(
-                "Attempt %d failed to parse/validate LLM response: %s", attempt, exc
+                "Attempt %d failed to parse LLM response: %s", attempt, exc
             )
             if attempt == 2:
                 raise HTTPException(
@@ -112,7 +129,60 @@ def plan(request: PlanRequest):
                         ),
                     },
                 )
-            # On first failure, loop and retry automatically
+
+
+@app.post("/plan/continue")
+def plan_continue(request: ContinueRequest):
+    """
+    Resume planning after the user has answered clarification questions.
+    Always returns a PlanResponse (never asks again).
+    """
+    logger.info(
+        "Continuing plan — original: %s, answers: %s",
+        request.original_prompt,
+        request.answers,
+    )
+
+    combined_prompt = (
+        f"Original request: {request.original_prompt}\n"
+        f"User's answers to clarification questions: {request.answers}"
+    )
+
+    for attempt in range(1, 3):
+        try:
+            raw_response = call_llm(
+                system_prompt=CONTINUE_PROMPT,
+                user_prompt=combined_prompt,
+            )
+            logger.info("LLM continue response (attempt %d): %s", attempt, raw_response)
+
+            result = _parse_llm_response(raw_response)
+
+            # If LLM still asks questions, force a plan with defaults
+            if isinstance(result, ClarificationResponse):
+                logger.warning("LLM asked questions again on /continue, retrying...")
+                if attempt == 2:
+                    raise ValueError("LLM failed to produce a plan after clarification")
+                continue
+
+            logger.info("Continue plan validated: %s", result.model_dump())
+            return result
+
+        except (json.JSONDecodeError, ValueError, Exception) as exc:
+            logger.warning(
+                "Continue attempt %d failed: %s", attempt, exc
+            )
+            if attempt == 2:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "status": "error",
+                        "message": (
+                            f"LLM returned invalid response after clarification. "
+                            f"Error: {str(exc)}"
+                        ),
+                    },
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -120,5 +190,4 @@ def plan(request: PlanRequest):
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)

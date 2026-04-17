@@ -6,48 +6,153 @@ const VALIDATION_AGENT_URL = process.env.VALIDATION_AGENT_URL || 'http://validat
 const PRICING_AGENT_URL = process.env.PRICING_AGENT_URL || 'http://pricing-agent:8001';
 const WORKER_AGENT_URL = process.env.WORKER_AGENT_URL || 'http://worker-agent:9000';
 
+/**
+ * Phase 1: Send prompt to master agent.
+ * If it needs clarification, pause and wait for user reply.
+ * If it returns a ready plan, continue through the full pipeline.
+ */
 export async function orchestratePipeline(requestId: number, prompt: string) {
   try {
-    // 1. Planning Phase
-    await updateRequestStatus(requestId, 'planning', 'Starting Master Agent planning phase...');
+    // 1. Planning Phase — may ask questions
+    await updateRequestStatus(requestId, 'planning', '🧠 Sending prompt to Master Agent...');
     const masterResponse = await axios.post(`${MASTER_AGENT_URL}/plan`, { prompt });
-    const plan = masterResponse.data;
-    await updateRequestStatus(requestId, 'planning', `Plan generated successfully: ${JSON.stringify(plan)}`);
+    const masterResult = masterResponse.data;
 
-    // 2. Validation Phase
-    await updateRequestStatus(requestId, 'planning', 'Sending plan to Validation Agent...');
-    const validationResponse = await axios.post(`${VALIDATION_AGENT_URL}/validate`, plan);
-    const validationResult = validationResponse.data;
-    
-    if (!validationResult.approved) {
-      await updateRequestStatus(requestId, 'failed', `Validation rejected: ${JSON.stringify(validationResult.reasons)}`);
-      return;
+    if (masterResult.status === 'needs_clarification') {
+      // Store questions and pause — wait for user reply
+      const questionList = masterResult.questions.map((q: string, i: number) => `❓ ${i + 1}. ${q}`).join('\n');
+      await updateRequestStatus(
+        requestId,
+        'awaiting_input',
+        `🤖 AI needs more details:\n${questionList}`
+      );
+      // Store original prompt for later continuation
+      await prisma.request.update({
+        where: { id: requestId },
+        data: { prompt: prompt }
+      });
+      return; // Stop here — user must reply via /api/request/:id/reply
     }
-    await updateRequestStatus(requestId, 'planning', 'Validation approved.');
 
-    // 3. Pricing Phase
-    await updateRequestStatus(requestId, 'planning', 'Sending plan to Pricing Agent...');
-    const pricingResponse = await axios.post(`${PRICING_AGENT_URL}/estimate`, plan);
-    const pricingResult = pricingResponse.data;
-    await updateRequestStatus(requestId, 'planning', `Estimated cost: $${pricingResult.estimated_monthly_cost_usd} - ${pricingResult.breakdown}`);
-
-    // 4. Execution Phase
-    await updateRequestStatus(requestId, 'executing', 'Sending plan to Worker Agent for AWS execution...');
-    const workerResponse = await axios.post(`${WORKER_AGENT_URL}/execute`, plan);
-    const workerResult = workerResponse.data;
-
-    if (workerResult.status === 'failed') {
-      await updateRequestStatus(requestId, 'failed', `Execution failed: ${workerResult.error}`);
-    } else {
-      await updateRequestStatus(requestId, 'success', `Execution completed successfully: ${JSON.stringify(workerResult)}`);
-    }
+    // Plan is ready — continue to execution pipeline
+    await executeReadyPlan(requestId, masterResult);
 
   } catch (error: any) {
     console.error(`Orchestration failed for Request ID ${requestId}:`, error.message);
     const errorMsg = error.response?.data ? JSON.stringify(error.response.data) : error.message;
-    await updateRequestStatus(requestId, 'failed', `Error in pipeline: ${errorMsg}`);
+    await updateRequestStatus(requestId, 'failed', `❌ Error in pipeline: ${errorMsg}`);
   }
 }
+
+/**
+ * Phase 2: Resume after user answers clarification questions.
+ * Calls master-agent /plan/continue, then runs the full pipeline.
+ */
+export async function resumePipeline(requestId: number, originalPrompt: string, answers: string) {
+  try {
+    await updateRequestStatus(requestId, 'planning', `💬 Received your answers. Generating final plan...`);
+
+    const continueResponse = await axios.post(`${MASTER_AGENT_URL}/plan/continue`, {
+      original_prompt: originalPrompt,
+      answers: answers,
+    });
+    const plan = continueResponse.data;
+
+    if (plan.status === 'needs_clarification') {
+      const questionList = plan.questions.map((q: string, i: number) => `❓ ${i + 1}. ${q}`).join('\n');
+      await updateRequestStatus(
+        requestId,
+        'awaiting_input',
+        `🤖 AI still needs more details:\n${questionList}`
+      );
+      return;
+    }
+
+    await executeReadyPlan(requestId, plan);
+
+  } catch (error: any) {
+    console.error(`Resume failed for Request ID ${requestId}:`, error.message);
+    const errorMsg = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+    await updateRequestStatus(requestId, 'failed', `❌ Error resuming pipeline: ${errorMsg}`);
+  }
+}
+
+/**
+ * Execute the full validation → pricing → worker pipeline
+ * once we have a ready plan from the master agent.
+ */
+async function executeReadyPlan(requestId: number, plan: any) {
+  await updateRequestStatus(
+    requestId,
+    'planning',
+    `📋 Plan generated: ${plan.service} → ${plan.action} (${JSON.stringify(plan.parameters)})`
+  );
+
+  // 2. Validation Phase
+  await updateRequestStatus(requestId, 'planning', '🛡️ Sending plan to Validation Agent...');
+  const validationResponse = await axios.post(`${VALIDATION_AGENT_URL}/validate`, plan);
+  const validationResult = validationResponse.data;
+
+  if (!validationResult.approved) {
+    const reasons = validationResult.reasons.map((r: string) => `⛔ ${r}`).join('\n');
+    await updateRequestStatus(requestId, 'failed', `🛡️ Validation REJECTED:\n${reasons}`);
+    return;
+  }
+  await updateRequestStatus(requestId, 'planning', '✅ Validation approved.');
+
+  // 3. Pricing Phase
+  await updateRequestStatus(requestId, 'planning', '💰 Estimating cost with Pricing Agent...');
+  const pricingResponse = await axios.post(`${PRICING_AGENT_URL}/estimate`, plan);
+  const pricingResult = pricingResponse.data;
+
+  const costDisplay = pricingResult.estimated_monthly_cost_usd
+    ? `$${pricingResult.estimated_monthly_cost_usd}/month`
+    : 'Unable to estimate';
+  await updateRequestStatus(
+    requestId,
+    'planning',
+    `💰 Estimated Cost: ${costDisplay}\n📊 ${pricingResult.breakdown || 'N/A'}\n⚠️ ${pricingResult.warning || 'Estimate only.'}`
+  );
+
+  // 4. Execution Phase
+  await updateRequestStatus(requestId, 'executing', '🚀 Executing on AWS via Worker Agent...');
+  const workerResponse = await axios.post(`${WORKER_AGENT_URL}/execute`, plan);
+  const workerResult = workerResponse.data;
+
+  if (workerResult.status === 'failed') {
+    await updateRequestStatus(requestId, 'failed', `❌ Execution failed: ${workerResult.error}`);
+  } else {
+    // Format detailed resource info
+    let successMsg = `✅ AWS Resource Created Successfully!\n`;
+    successMsg += `🆔 Resource ID: ${workerResult.resource_id}`;
+
+    if (workerResult.details) {
+      const d = workerResult.details;
+      if (d.InstanceId) {
+        successMsg += `\n\n📦 EC2 Instance Details:`;
+        successMsg += `\n   Instance ID: ${d.InstanceId}`;
+        successMsg += `\n   Type: ${d.InstanceType || 'N/A'}`;
+        successMsg += `\n   Region: ${d.Region || 'N/A'}`;
+        successMsg += `\n   Public IP: ${d.PublicIp || 'N/A'}`;
+        successMsg += `\n   Private IP: ${d.PrivateIp || 'N/A'}`;
+        successMsg += `\n   State: ${d.State || 'N/A'}`;
+        successMsg += `\n   Key Pair: ${d.KeyName || 'None'}`;
+        successMsg += `\n   Launch Time: ${d.LaunchTime || 'N/A'}`;
+      }
+      if (d.instances) {
+        successMsg += `\n\n📋 Instances:\n${JSON.stringify(d.instances, null, 2)}`;
+      }
+      if (d.BucketName) {
+        successMsg += `\n\n🪣 S3 Bucket Details:`;
+        successMsg += `\n   Name: ${d.BucketName}`;
+        successMsg += `\n   Region: ${d.Region || 'N/A'}`;
+      }
+    }
+
+    await updateRequestStatus(requestId, 'success', successMsg);
+  }
+}
+
 
 async function updateRequestStatus(id: number, status: string, newLog: string) {
   const request = await prisma.request.findUnique({ where: { id } });
@@ -55,7 +160,7 @@ async function updateRequestStatus(id: number, status: string, newLog: string) {
   if (!Array.isArray(logs)) {
     logs = [];
   }
-  
+
   logs.push(`[${new Date().toISOString()}] ${newLog}`);
 
   await prisma.request.update({

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PromptInput } from './components/PromptInput';
 import { RequestHistory } from './components/RequestHistory';
+import { PastRequests } from './components/PastRequests';
 import { submitRequest } from './services/api';
 import { ServerCog } from 'lucide-react';
 
@@ -55,6 +56,8 @@ function App() {
             activeRequestId={activeRequestId} 
             onExecutionComplete={handleExecutionComplete} 
           />
+
+          <PastRequests />
         </main>
       </div>
     </div>

@@ -3,7 +3,7 @@ Pydantic schemas for the Master Agent.
 Validates all input from the backend and all output before sending downstream.
 """
 
-from typing import Any, Dict, Literal
+from typing import Any, Dict, List, Literal, Optional, Union
 from pydantic import BaseModel, Field
 
 
@@ -17,11 +17,33 @@ class PlanRequest(BaseModel):
     )
 
 
+class ContinueRequest(BaseModel):
+    """Input payload for POST /plan/continue — after user answers clarification questions."""
+    original_prompt: str = Field(
+        ...,
+        description="The original user prompt that triggered clarification.",
+    )
+    answers: str = Field(
+        ...,
+        description="The user's answers to the clarification questions.",
+    )
+
+
+class ClarificationResponse(BaseModel):
+    """Returned when the LLM needs more info from the user."""
+    status: Literal["needs_clarification"] = "needs_clarification"
+    questions: List[str] = Field(
+        ...,
+        description="List of clarifying questions for the user.",
+    )
+
+
 class PlanResponse(BaseModel):
     """
     Structured JSON plan output returned to the Backend.
     Mirrors what the Worker Agent consumes via POST /execute.
     """
+    status: Literal["ready"] = "ready"
     service: str = Field(
         ...,
         description="Target AWS service: s3, ec2, or iam.",
