@@ -10,9 +10,9 @@ import boto3
 from botocore.exceptions import ClientError
 
 
-def _ec2_client():
+def _ec2_client(region=None):
     """Create and return a boto3 EC2 client (reads creds from environment)."""
-    return boto3.client("ec2", region_name=os.environ.get("AWS_REGION", "us-east-1"))
+    return boto3.client("ec2", region_name=region or os.environ.get("AWS_REGION", "us-east-1"))
 
 
 def _get_instance_details(client, instance_id: str, max_retries: int = 5) -> dict:
@@ -63,7 +63,7 @@ def _get_instance_details(client, instance_id: str, max_retries: int = 5) -> dic
 
 def run_instances(parameters: dict) -> dict:
     image_id = parameters.get("ImageId") or parameters.get("image_id")
-    instance_type = parameters.get("InstanceType") or parameters.get("instance_type", "t2.micro")
+    instance_type = parameters.get("InstanceType") or parameters.get("instance_type", "t3.micro")
     min_count = parameters.get("MinCount") or parameters.get("min_count", 1)
     max_count = parameters.get("MaxCount") or parameters.get("max_count", 1)
     key_name = parameters.get("KeyName")
@@ -80,7 +80,8 @@ def run_instances(parameters: dict) -> dict:
             return {"status": "failed", "error": f"No default AMI mapped for region {region}. Please specify ImageId."}
 
     try:
-        client = _ec2_client()
+        region = parameters.get("Region") or parameters.get("region")
+        client = _ec2_client(region)
 
         run_kwargs = {
             "ImageId": image_id,
@@ -117,7 +118,8 @@ def stop_instances(parameters: dict) -> dict:
     if not ids:
         return {"status": "failed", "error": "Missing required parameter: InstanceIds"}
     try:
-        _ec2_client().stop_instances(InstanceIds=ids)
+        region = parameters.get("Region") or parameters.get("region")
+        _ec2_client(region).stop_instances(InstanceIds=ids)
         return {"status": "success", "resource_id": ", ".join(ids), "details": {"action": "stop", "InstanceIds": ids}}
     except ClientError as e:
         return {"status": "failed", "error": f"AWS Error: {e.response['Error']['Message']}"}
@@ -130,7 +132,8 @@ def start_instances(parameters: dict) -> dict:
     if not ids:
         return {"status": "failed", "error": "Missing required parameter: InstanceIds"}
     try:
-        _ec2_client().start_instances(InstanceIds=ids)
+        region = parameters.get("Region") or parameters.get("region")
+        _ec2_client(region).start_instances(InstanceIds=ids)
         return {"status": "success", "resource_id": ", ".join(ids), "details": {"action": "start", "InstanceIds": ids}}
     except ClientError as e:
         return {"status": "failed", "error": f"AWS Error: {e.response['Error']['Message']}"}
@@ -143,7 +146,8 @@ def terminate_instances(parameters: dict) -> dict:
     if not ids:
         return {"status": "failed", "error": "Missing required parameter: InstanceIds"}
     try:
-        _ec2_client().terminate_instances(InstanceIds=ids)
+        region = parameters.get("Region") or parameters.get("region")
+        _ec2_client(region).terminate_instances(InstanceIds=ids)
         return {"status": "success", "resource_id": ", ".join(ids), "details": {"action": "terminate", "InstanceIds": ids}}
     except ClientError as e:
         return {"status": "failed", "error": f"AWS Error: {e.response['Error']['Message']}"}

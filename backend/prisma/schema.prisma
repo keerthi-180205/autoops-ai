@@ -10,8 +10,12 @@ datasource db {
 
 model Request {
   id          Int      @id @default(autoincrement())
-  prompt      String
-  status      String   @default("pending")
+  prompt        String
+  region        String?
+  resource_type String?
+  resource_id   String?
+  cost          Float    @default(0)
+  status        String   @default("pending")
   result_logs Json     @default("[]")
   created_at  DateTime @default(now())
 }

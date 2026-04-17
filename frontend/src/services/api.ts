@@ -23,3 +23,17 @@ export const fetchHistory = async () => {
   const response = await axios.get(`${API_URL}/history`);
   return response.data; // array of past requests
 };
+
+export const destroyResource = async (type: string, id: string, requestId: number) => {
+  const response = await axios.post(`${API_URL}/destroy`, {
+    resource_type: type,
+    resource_id: id,
+    requestId: requestId
+  });
+  return response.data;
+};
+
+export const fetchCostSummary = async () => {
+  const response = await axios.get(`${API_URL}/cost-summary`);
+  return response.data; // { total_cost: number }
+};

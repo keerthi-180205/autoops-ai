@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import http from 'http';
+import { initSocket } from './socket';
 import apiRoutes from './routes/index';
 
 const app = express();
@@ -16,6 +18,11 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+
+// Initialize Socket.io via helper
+initSocket(server);
+
+server.listen(PORT, () => {
   console.log(`Backend server listening on port ${PORT}`);
 });

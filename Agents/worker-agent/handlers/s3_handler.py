@@ -50,7 +50,8 @@ def delete_bucket(parameters: dict) -> dict:
     if not bucket:
         return {"status": "failed", "error": "Missing required parameter: Bucket"}
     try:
-        _s3_client().delete_bucket(Bucket=bucket)
+        region = parameters.get("Region") or parameters.get("region")
+        _s3_client(region_name=region).delete_bucket(Bucket=bucket)
         return {"status": "success", "resource_id": bucket}
     except ClientError as e:
         return {"status": "failed", "error": f"AWS Error: {e.response['Error']['Message']}"}
@@ -60,7 +61,8 @@ def delete_bucket(parameters: dict) -> dict:
 
 def list_buckets(parameters: dict) -> dict:
     try:
-        response = _s3_client().list_buckets()
+        region = parameters.get("Region") or parameters.get("region")
+        response = _s3_client(region_name=region).list_buckets()
         buckets = [b["Name"] for b in response.get("Buckets", [])]
         return {"status": "success", "resource_id": "list", "buckets": buckets}
     except ClientError as e:
@@ -76,7 +78,8 @@ def upload_object(parameters: dict) -> dict:
     if not bucket or not key:
         return {"status": "failed", "error": "Missing required parameters: Bucket, Key"}
     try:
-        _s3_client().put_object(Bucket=bucket, Key=key, Body=body.encode())
+        region = parameters.get("Region") or parameters.get("region")
+        _s3_client(region_name=region).put_object(Bucket=bucket, Key=key, Body=body.encode())
         return {"status": "success", "resource_id": f"{bucket}/{key}"}
     except ClientError as e:
         return {"status": "failed", "error": f"AWS Error: {e.response['Error']['Message']}"}
@@ -90,7 +93,8 @@ def delete_object(parameters: dict) -> dict:
     if not bucket or not key:
         return {"status": "failed", "error": "Missing required parameters: Bucket, Key"}
     try:
-        _s3_client().delete_object(Bucket=bucket, Key=key)
+        region = parameters.get("Region") or parameters.get("region")
+        _s3_client(region_name=region).delete_object(Bucket=bucket, Key=key)
         return {"status": "success", "resource_id": f"{bucket}/{key}"}
     except ClientError as e:
         return {"status": "failed", "error": f"AWS Error: {e.response['Error']['Message']}"}

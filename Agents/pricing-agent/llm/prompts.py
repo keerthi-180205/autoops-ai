@@ -20,10 +20,11 @@ RULES (non-negotiable):
    }
 
 PRICING KNOWLEDGE (use as reference):
-- EC2 t2.micro:    ~$0.0116/hr in us-east-1, ~$0.0124/hr in ap-south-1
+- EC2 t3.micro:    ~$0.0104/hr in us-east-1, ~$0.0116/hr in ap-south-1
+- EC2 t3.small:    ~$0.0208/hr in us-east-1
+- EC2 t2.micro:    ~$0.0116/hr in us-east-1 (Deprecated for Free Tier in some regions)
 - EC2 t2.small:    ~$0.023/hr in us-east-1
 - EC2 t2.medium:   ~$0.0464/hr in us-east-1
-- EC2 t3.micro:    ~$0.0104/hr in us-east-1
 - S3 bucket:       ~$0.023/GB/month for standard storage (bucket itself is free)
 - S3 requests:     ~$0.0004 per 1,000 PUT requests
 - IAM users/roles: FREE (no charge)

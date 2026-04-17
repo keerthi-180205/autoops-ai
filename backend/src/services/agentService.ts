@@ -1,5 +1,6 @@
 import axios from 'axios';
 import prisma from '../db/prismaClient';
+import { getIO } from '../socket';
 
 const MASTER_AGENT_URL = process.env.MASTER_AGENT_URL || 'http://master-agent:8000';
 const VALIDATION_AGENT_URL = process.env.VALIDATION_AGENT_URL || 'http://validation-agent:8002';
@@ -11,11 +12,11 @@ const WORKER_AGENT_URL = process.env.WORKER_AGENT_URL || 'http://worker-agent:90
  * If it needs clarification, pause and wait for user reply.
  * If it returns a ready plan, continue through the full pipeline.
  */
-export async function orchestratePipeline(requestId: number, prompt: string) {
+export async function orchestratePipeline(requestId: number, prompt: string, region?: string) {
   try {
     // 1. Planning Phase — may ask questions
     await updateRequestStatus(requestId, 'planning', '🧠 Sending prompt to Master Agent...');
-    const masterResponse = await axios.post(`${MASTER_AGENT_URL}/plan`, { prompt });
+    const masterResponse = await axios.post(`${MASTER_AGENT_URL}/plan`, { prompt, region, requestId });
     const masterResult = masterResponse.data;
 
     if (masterResult.status === 'needs_clarification') {
@@ -48,13 +49,15 @@ export async function orchestratePipeline(requestId: number, prompt: string) {
  * Phase 2: Resume after user answers clarification questions.
  * Calls master-agent /plan/continue, then runs the full pipeline.
  */
-export async function resumePipeline(requestId: number, originalPrompt: string, answers: string) {
+export async function resumePipeline(requestId: number, originalPrompt: string, answers: string, region?: string) {
   try {
     await updateRequestStatus(requestId, 'planning', `💬 Received your answers. Generating final plan...`);
 
     const continueResponse = await axios.post(`${MASTER_AGENT_URL}/plan/continue`, {
       original_prompt: originalPrompt,
       answers: answers,
+      region: region,
+      requestId: requestId
     });
     const plan = continueResponse.data;
 
@@ -90,7 +93,7 @@ async function executeReadyPlan(requestId: number, plan: any) {
 
   // 2. Validation Phase
   await updateRequestStatus(requestId, 'planning', '🛡️ Sending plan to Validation Agent...');
-  const validationResponse = await axios.post(`${VALIDATION_AGENT_URL}/validate`, plan);
+  const validationResponse = await axios.post(`${VALIDATION_AGENT_URL}/validate`, { ...plan, requestId });
   const validationResult = validationResponse.data;
 
   if (!validationResult.approved) {
@@ -102,7 +105,7 @@ async function executeReadyPlan(requestId: number, plan: any) {
 
   // 3. Pricing Phase
   await updateRequestStatus(requestId, 'planning', '💰 Estimating cost with Pricing Agent...');
-  const pricingResponse = await axios.post(`${PRICING_AGENT_URL}/estimate`, plan);
+  const pricingResponse = await axios.post(`${PRICING_AGENT_URL}/estimate`, { ...plan, requestId });
   const pricingResult = pricingResponse.data;
 
   const costDisplay = pricingResult.estimated_monthly_cost_usd
@@ -116,7 +119,7 @@ async function executeReadyPlan(requestId: number, plan: any) {
 
   // 4. Execution Phase
   await updateRequestStatus(requestId, 'executing', '🚀 Executing on AWS via Worker Agent...');
-  const workerResponse = await axios.post(`${WORKER_AGENT_URL}/execute`, plan);
+  const workerResponse = await axios.post(`${WORKER_AGENT_URL}/execute`, { ...plan, requestId });
   const workerResult = workerResponse.data;
 
   if (workerResult.status === 'failed') {
@@ -150,6 +153,21 @@ async function executeReadyPlan(requestId: number, plan: any) {
     }
 
     await updateRequestStatus(requestId, 'success', successMsg);
+
+    // PERSISTENCE FOR TEARDOWN & COST AGGREGATOR
+    try {
+      await prisma.request.update({
+        where: { id: requestId },
+        data: {
+          resource_type: plan.service,
+          resource_id: workerResult.resource_id,
+          region: plan.parameters?.Region || plan.parameters?.region,
+          cost: pricingResult.estimated_monthly_cost_usd || 0
+        }
+      });
+    } catch (dbError) {
+      console.error('Failed to store resource metadata:', dbError);
+    }
   }
 }
 
@@ -161,7 +179,23 @@ async function updateRequestStatus(id: number, status: string, newLog: string) {
     logs = [];
   }
 
-  logs.push(`[${new Date().toISOString()}] ${newLog}`);
+  const formattedLog = `[${new Date().toISOString()}] ${newLog}`;
+  logs.push(formattedLog);
+
+  // Emit real-time log update via WebSocket
+  try {
+    const io = getIO();
+    io.to(`request_${id}`).emit('log_update', {
+      requestId: id,
+      log: formattedLog
+    });
+    io.to(`request_${id}`).emit('status_update', {
+      requestId: id,
+      status: status
+    });
+  } catch (error) {
+    // Socket not initialized yet or other issue — silent fail
+  }
 
   await prisma.request.update({
     where: { id },

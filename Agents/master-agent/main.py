@@ -11,6 +11,8 @@ Responsibilities:
 
 import json
 import logging
+import os
+import re
 from typing import Union
 
 from fastapi import FastAPI, HTTPException
@@ -59,6 +61,30 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+def _resolve_region(prompt: str, requested_region: str | None) -> str:
+    """
+    Determine the target AWS region using hierarchy:
+    1. Explicit requested_region from API
+    2. Regex match from prompt (us-east-1, ap-south-1, eu-west-1)
+    3. ENV fallback (AWS_REGION)
+    4. Hardcoded default (ap-south-1)
+    """
+    if requested_region:
+        logger.info("Using explicitly requested region: %s", requested_region)
+        return requested_region
+
+    # Look for region patterns in prompt
+    matches = re.findall(r"(us-east-1|ap-south-1|eu-west-1|us-west-2|eu-central-1)", prompt.lower())
+    if matches:
+        extracted = matches[0]
+        logger.info("Extracted region from prompt: %s", extracted)
+        return extracted
+
+    fallback = os.getenv("AWS_REGION", "ap-south-1")
+    logger.info("Using fallback region: %s", fallback)
+    return fallback
+
+
 def _parse_llm_response(raw: str) -> Union[ClarificationResponse, PlanResponse]:
     """
     Parse a raw LLM string into either a ClarificationResponse or PlanResponse.
@@ -101,11 +127,15 @@ def plan(request: PlanRequest):
       - PlanResponse { status, service, action, parameters }
     """
     logger.info("Received plan request: %s", request.prompt)
+    active_region = _resolve_region(request.prompt, request.region)
 
     for attempt in range(1, 3):
         try:
+            # Inject Active Region into the system prompt context
+            context_prompt = f"### ACTIVE CONTEXT ###\nActive Region: {active_region}\n\n{SYSTEM_PROMPT}"
+            
             raw_response = call_llm(
-                system_prompt=SYSTEM_PROMPT,
+                system_prompt=context_prompt,
                 user_prompt=request.prompt,
             )
             logger.info("LLM raw response (attempt %d): %s", attempt, raw_response)
@@ -147,11 +177,15 @@ def plan_continue(request: ContinueRequest):
         f"Original request: {request.original_prompt}\n"
         f"User's answers to clarification questions: {request.answers}"
     )
+    
+    active_region = _resolve_region(request.original_prompt, request.region)
 
     for attempt in range(1, 3):
         try:
+            context_prompt = f"### ACTIVE CONTEXT ###\nActive Region: {active_region}\n\n{CONTINUE_PROMPT}"
+            
             raw_response = call_llm(
-                system_prompt=CONTINUE_PROMPT,
+                system_prompt=context_prompt,
                 user_prompt=combined_prompt,
             )
             logger.info("LLM continue response (attempt %d): %s", attempt, raw_response)

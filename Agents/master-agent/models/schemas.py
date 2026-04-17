@@ -15,6 +15,11 @@ class PlanRequest(BaseModel):
         description="Natural-language instruction describing the desired AWS operation.",
         examples=["Create an S3 bucket named my-bucket in us-east-1"],
     )
+    region: Optional[str] = Field(
+        None,
+        description="Optional target AWS region. If not provided, will be extracted from prompt or use system default.",
+        examples=["us-east-1"],
+    )
 
 
 class ContinueRequest(BaseModel):
@@ -26,6 +31,10 @@ class ContinueRequest(BaseModel):
     answers: str = Field(
         ...,
         description="The user's answers to the clarification questions.",
+    )
+    region: Optional[str] = Field(
+        None,
+        description="Optional target AWS region.",
     )
 
 

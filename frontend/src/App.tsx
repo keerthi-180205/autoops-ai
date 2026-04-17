@@ -1,14 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { io } from 'socket.io-client';
 import { PromptInput } from './components/PromptInput';
 import { RequestHistory } from './components/RequestHistory';
 import { PastRequests } from './components/PastRequests';
+import { CostSummary } from './components/CostSummary';
 import { submitRequest } from './services/api';
 import { ServerCog } from 'lucide-react';
+
+// Connect to the backend socket
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+// Initialize socket once, stripping /api if present for the base connection
+const socket = io(API_URL.replace('/api', ''), {
+  transports: ['websocket', 'polling'], // Fallback for stability
+  reconnection: true
+});
 
 function App() {
   const [activeRequestId, setActiveRequestId] = useState<number | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    socket.on('connect', () => {
+      console.log('Connected to WebSocket server');
+    });
+
+    return () => {
+      socket.off('connect');
+    };
+  }, []);
 
   const handlePromptSubmit = async (prompt: string) => {
     setIsExecuting(true);
@@ -16,6 +36,9 @@ function App() {
     try {
       const response = await submitRequest(prompt);
       setActiveRequestId(response.id);
+      
+      // Force room join. Using toString() for key consistency.
+      socket.emit('join_request', String(response.id));
     } catch (err: any) {
       console.error(err);
       setErrorMsg("Failed to reach the AutoOps backend. Is it running on port 5000?");
@@ -44,6 +67,8 @@ function App() {
         </header>
 
         <main>
+          <CostSummary />
+
           {errorMsg && (
             <div className="max-w-2xl mx-auto mb-6 bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-lg text-center">
               {errorMsg}
@@ -55,6 +80,7 @@ function App() {
           <RequestHistory 
             activeRequestId={activeRequestId} 
             onExecutionComplete={handleExecutionComplete} 
+            socket={socket}
           />
 
           <PastRequests />

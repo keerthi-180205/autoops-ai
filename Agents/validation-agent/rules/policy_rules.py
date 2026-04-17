@@ -3,17 +3,18 @@ Policy Rules — hardcoded cost-control and policy checks.
 These run BEFORE any LLM or AWS call.
 
 Rules enforced:
-  - Allowed regions: ap-south-1 and us-east-1 only.
+  - Allowed regions: ap-south-1, us-east-1, and eu-west-1 only.
   - EC2: Block instance types larger than t2.medium.
   - IAM: Block wildcard (*) admin policy attachments.
 """
 
 # Allowed AWS regions
-ALLOWED_REGIONS = {"ap-south-1", "us-east-1"}
+ALLOWED_REGIONS = {"ap-south-1", "us-east-1", "eu-west-1"}
 
 # EC2 instance type size order (smallest to largest)
 # Anything above t2.medium is blocked.
 BLOCKED_EC2_INSTANCE_TYPES = {
+    "t2.micro", # Blocked due to Free Tier eligibility issues in modern accounts
     "t2.large", "t2.xlarge", "t2.2xlarge",
     "t3.large", "t3.xlarge", "t3.2xlarge",
     "m5.large", "m5.xlarge", "m5.2xlarge", "m5.4xlarge", "m5.8xlarge",
@@ -44,8 +45,8 @@ def check_ec2_instance_type(parameters: dict) -> list[str]:
     instance_type = parameters.get("InstanceType")
     if instance_type and instance_type in BLOCKED_EC2_INSTANCE_TYPES:
         violations.append(
-            f"Instance type '{instance_type}' exceeds the allowed limit "
-            f"(max: t2.medium)."
+            f"Instance type '{instance_type}' is not allowed for safety/cost reasons. "
+            f"Please use 't3.micro' for free-tier eligible deployments."
         )
     return violations
 
