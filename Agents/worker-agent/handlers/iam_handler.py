@@ -3,13 +3,14 @@ IAM Handler — maps validated JSON plans to boto3 IAM API calls.
 NO AI, NO LLMs. Pure if/else and try/except.
 """
 
+import os
 import boto3
 from botocore.exceptions import ClientError
 
 
 def _iam_client():
     """Create and return a boto3 IAM client (reads creds from environment)."""
-    return boto3.client("iam")
+    return boto3.client("iam", region_name=os.environ.get("AWS_REGION", "us-east-1"))
 
 
 def create_user(parameters: dict) -> dict:

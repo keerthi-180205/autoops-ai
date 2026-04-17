@@ -3,13 +3,14 @@ S3 Handler — maps validated JSON plans to boto3 S3 API calls.
 NO AI, NO LLMs. Pure if/else and try/except.
 """
 
+import os
 import boto3
 from botocore.exceptions import ClientError
 
 
 def _s3_client():
     """Create and return a boto3 S3 client (reads creds from environment)."""
-    return boto3.client("s3")
+    return boto3.client("s3", region_name=os.environ.get("AWS_REGION", "us-east-1"))
 
 
 def create_bucket(parameters: dict) -> dict:

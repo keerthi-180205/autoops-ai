@@ -1,50 +1,45 @@
-"""
-LLM Client — initializes the LLM using keys from the environment.
-Supports OpenAI (GPT-4o) and falls back gracefully.
-"""
-
 import os
-from openai import OpenAI
+from google import genai
 from dotenv import load_dotenv
 
 load_dotenv()
 
-_client: OpenAI | None = None
+_client: genai.Client | None = None
 
 
-def get_llm_client() -> OpenAI:
-    """Return a singleton OpenAI client, initialized from OPENAI_API_KEY env var."""
+def get_llm_client() -> genai.Client:
+    """Return a singleton Gemini client, initialized from GEMINI_API_KEY env var."""
     global _client
     if _client is None:
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise EnvironmentError(
-                "OPENAI_API_KEY is not set. "
+                "GEMINI_API_KEY is not set. "
                 "Add it to your .env file or environment variables."
             )
-        _client = OpenAI(api_key=api_key)
+        _client = genai.Client(api_key=api_key)
     return _client
 
 
-def call_llm(system_prompt: str, user_prompt: str, model: str = "gpt-4o") -> str:
+def call_llm(system_prompt: str, user_prompt: str, model: str = "gemini-flash-latest") -> str:
     """
     Send a chat completion request to the LLM.
 
     Args:
         system_prompt: The strict system instruction string.
         user_prompt: The natural-language user input.
-        model: Which OpenAI model to use.
+        model: Which Gemini model to use.
 
     Returns:
         Raw string content from the LLM response.
     """
     client = get_llm_client()
-    response = client.chat.completions.create(
+    response = client.models.generate_content(
         model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0,  # Deterministic — we need strict JSON, no creativity
+        contents=user_prompt,
+        config={
+            "system_instruction": system_prompt,
+            "temperature": 0.0,
+        }
     )
-    return response.choices[0].message.content.strip()
+    return response.text.strip()

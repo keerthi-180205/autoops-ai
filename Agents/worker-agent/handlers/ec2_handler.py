@@ -3,13 +3,14 @@ EC2 Handler — maps validated JSON plans to boto3 EC2 API calls.
 NO AI, NO LLMs. Pure if/else and try/except.
 """
 
+import os
 import boto3
 from botocore.exceptions import ClientError
 
 
 def _ec2_client():
     """Create and return a boto3 EC2 client (reads creds from environment)."""
-    return boto3.client("ec2")
+    return boto3.client("ec2", region_name=os.environ.get("AWS_REGION", "us-east-1"))
 
 
 def run_instances(parameters: dict) -> dict:
