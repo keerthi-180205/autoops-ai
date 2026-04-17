@@ -4,8 +4,24 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "echo 'backend placeholder starting' && tail -f /dev/null"
+    "start": "npx prisma generate && npx prisma db push --accept-data-loss && ts-node src/server.ts",
+    "dev": "nodemon src/server.ts"
   },
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "axios": "^1.15.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "prisma": "^5.22.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.6.0",
+    "nodemon": "^3.1.14",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  }
 }

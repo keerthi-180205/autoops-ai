@@ -20,7 +20,15 @@ def run_instances(parameters: dict) -> dict:
     max_count = parameters.get("MaxCount", 1)
 
     if not image_id:
-        return {"status": "failed", "error": "Missing required parameter: ImageId"}
+        region = os.environ.get("AWS_REGION", "us-east-1")
+        default_amis = {
+            "us-east-1": "ami-0c101f26f147fa7fd",
+            "us-west-2": "ami-0ceecbb0f30a902a6",
+            "ap-south-1": "ami-0da59f1af71ea4ad2",
+        }
+        image_id = default_amis.get(region)
+        if not image_id:
+             return {"status": "failed", "error": f"No default AMI mapped for region {region}. Please specify ImageId."}
 
     try:
         response = _ec2_client().run_instances(

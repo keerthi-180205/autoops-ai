@@ -1,51 +1,73 @@
-# Frontend Microservice PRD & Technical Spec
+# React + TypeScript + Vite
 
-## 1. Overview
-The frontend is a "dumb" UI layer. It holds zero AWS credentials, calls no LLMs, and performs no orchestration. Its sole purpose is to capture user text input, forward it to the `backend`, and visually render the status of the infrastructure creation.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-## 2. Tech Stack & Environment
-- **Framework:** Next.js (App Router) or React (Vite).
-- **Internal Network Port:** `3000` (`http://localhost:3000`).
-- **Dependencies to install:** `axios` (for fetching), `tailwindcss` (for styling).
+Currently, two official plugins are available:
 
-## 3. Mandatory File Structure
-You must structure your logic inside the `frontend/` directory like this:
-```text
-frontend/
-├── src/
-│   ├── app/
-│   │   ├── page.tsx          # Main dashboard & layout compilation
-│   ├── components/
-│   │   ├── PromptInput.tsx   # Text input box and Execute button
-│   │   ├── RequestHistory.tsx# Table showing past request statuses
-│   ├── services/
-│   │   ├── api.ts            # The ONLY file allowed to make axios calls
-├── package.json
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+
+## React Compiler
+
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Expanding the ESLint configuration
+
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+
+```js
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+
+      // Remove tseslint.configs.recommended and replace with this
+      tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      tseslint.configs.stylisticTypeChecked,
+
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
 ```
 
-## 4. API Communication Contracts
-**Rule:** You will ONLY communicate with the `backend` container running on `http://backend:5000` (or `localhost:5000` from the browser). Do NOT talk to the agents.
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
 
-### A. Submitting a New Infrastructure Request
-- **Endpoint:** `POST /api/request`
-- **Request Body:** `{ "prompt": "create a public s3 bucket called test-bucket" }`
-- **Expected Return:** `{ "id": 123, "status": "planning" }`
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
 
-### B. Polling for Execution Status
-- **Endpoint:** `GET /api/status/{id}`
-- **Expected Return:**
-  ```json
+export default defineConfig([
+  globalIgnores(['dist']),
   {
-    "id": 123,
-    "status": "success", 
-    "message": "Bucket test-bucket created successfully",
-    "logs": ["Parsed intent...", "Generated JSON plan...", "AWS S3 Bucket Created"]
-  }
-  ```
-  *(Note: `status` will cycle from `planning` -> `executing` -> `success` / `failed`)*
-
-## 5. UI Logic & State Requirements
-1. **Button Debouncing:** When a user clicks "Execute", immediately disable the submit button and show a loading spinner to prevent duplicate spam clicking.
-2. **Polling Loop:** Use `setInterval` (or React Query) to hit the `/api/status/{id}` endpoint every 2 seconds.
-3. **Termination:** Clear the setInterval polling loop ONLY when the status string equals exactly `"success"` or `"failed"`.
-4. **Error Boundaries:** If the backend crashes and returns HTTP 500, display a red toast notification. Do not let the React app white-screen.
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs['recommended-typescript'],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
+```

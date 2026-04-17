@@ -29,7 +29,8 @@ s3:
   - delete_object       → parameters: { "Bucket": "<name>", "Key": "<file_key>" }
 
 ec2:
-  - run_instances       → parameters: { "ImageId": "<ami_id>", "InstanceType": "<type>", "MinCount": <int>, "MaxCount": <int> }
+  - run_instances       → parameters: { "ImageId": "<ami_id_optional>", "InstanceType": "<type>", "MinCount": <int>, "MaxCount": <int> }
+    (IMPORTANT: Do NOT hallucinate an ImageId. Leave the ImageId key out entirely if the user does not explicitly provide an AMI).
   - stop_instances      → parameters: { "InstanceIds": ["<id>"] }
   - start_instances     → parameters: { "InstanceIds": ["<id>"] }
   - terminate_instances → parameters: { "InstanceIds": ["<id>"] }
