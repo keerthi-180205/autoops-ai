@@ -62,10 +62,10 @@ def _get_instance_details(client, instance_id: str, max_retries: int = 5) -> dic
 
 
 def run_instances(parameters: dict) -> dict:
-    image_id = parameters.get("ImageId")
-    instance_type = parameters.get("InstanceType", "t2.micro")
-    min_count = parameters.get("MinCount", 1)
-    max_count = parameters.get("MaxCount", 1)
+    image_id = parameters.get("ImageId") or parameters.get("image_id")
+    instance_type = parameters.get("InstanceType") or parameters.get("instance_type", "t2.micro")
+    min_count = parameters.get("MinCount") or parameters.get("min_count", 1)
+    max_count = parameters.get("MaxCount") or parameters.get("max_count", 1)
     key_name = parameters.get("KeyName")
 
     if not image_id:

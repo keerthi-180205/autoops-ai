@@ -20,7 +20,7 @@ def get_llm_client() -> genai.Client:
     return _client
 
 
-def call_llm(system_prompt: str, user_prompt: str, model: str = "gemini-flash-latest") -> str:
+def call_llm(system_prompt: str, user_prompt: str, model: str = "gemini-2.0-flash") -> str:
     """Send a chat completion request for edge-case validation reasoning."""
     client = get_llm_client()
     response = client.models.generate_content(

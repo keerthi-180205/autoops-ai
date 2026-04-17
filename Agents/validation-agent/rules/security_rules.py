@@ -13,7 +13,7 @@ Rules enforced:
 def check_s3_bucket_name_security(parameters: dict) -> list[str]:
     """Flag S3 bucket names that suggest insecure or public access."""
     violations = []
-    bucket = parameters.get("Bucket", "")
+    bucket = parameters.get("Bucket") or parameters.get("bucket", "")
 
     if len(bucket) < 5:
         violations.append(
@@ -34,7 +34,7 @@ def check_s3_bucket_name_security(parameters: dict) -> list[str]:
 def check_ec2_instance_count(parameters: dict) -> list[str]:
     """Ensure EC2 instance launch counts are within safe limits."""
     violations = []
-    max_count = parameters.get("MaxCount", 1)
+    max_count = parameters.get("MaxCount") or parameters.get("max_count", 1)
 
     try:
         if int(max_count) > 5:
@@ -76,13 +76,13 @@ def run_security_checks(service: str, action: str, parameters: dict) -> list[str
     """
     violations = []
 
-    if service == "s3" and action in ("create_bucket", "upload_object"):
+    if service == "s3" and action in ("createbucket", "uploadobject"):
         violations.extend(check_s3_bucket_name_security(parameters))
 
-    if service == "ec2" and action == "run_instances":
+    if service == "ec2" and action == "runinstances":
         violations.extend(check_ec2_instance_count(parameters))
 
-    if service == "iam" and action == "create_role":
+    if service == "iam" and action == "createrole":
         violations.extend(check_iam_role_trust_policy(parameters))
 
     return violations

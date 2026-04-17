@@ -84,7 +84,7 @@ def run_policy_checks(service: str, action: str, parameters: dict) -> list[str]:
         violations.extend(check_ec2_instance_type(parameters))
 
     # IAM-specific checks
-    if service == "iam" and action == "attach_user_policy":
+    if service == "iam" and action == "attachuserpolicy":
         violations.extend(check_iam_wildcard_policy(parameters))
 
     return violations

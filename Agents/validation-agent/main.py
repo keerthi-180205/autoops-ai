@@ -110,15 +110,18 @@ def validate(request: ValidateRequest):
     all_violations: list[str] = []
 
     try:
+        service = request.service.lower().replace("_", "").replace("-", "")
+        action = request.action.lower().replace("_", "").replace("-", "")
+
         # --- Step 1: Policy checks ---
         policy_violations = run_policy_checks(
-            request.service, request.action, request.parameters
+            service, action, request.parameters
         )
         all_violations.extend(policy_violations)
 
         # --- Step 2: Security checks ---
         security_violations = run_security_checks(
-            request.service, request.action, request.parameters
+            service, action, request.parameters
         )
         all_violations.extend(security_violations)
 

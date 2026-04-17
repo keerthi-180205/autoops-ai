@@ -21,7 +21,7 @@ def get_llm_client() -> genai.Client:
     return _client
 
 
-def call_llm(system_prompt: str, user_prompt: str, model: str = "gemini-flash-latest") -> str:
+def call_llm(system_prompt: str, user_prompt: str, model: str = "gemini-3.1-flash-lite-preview") -> str:
     """
     Send a chat completion request to the LLM.
 

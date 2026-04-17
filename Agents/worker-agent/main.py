@@ -86,9 +86,9 @@ IAM_ACTIONS = {
 }
 
 SERVICE_ROUTER = {
-    "s3": S3_ACTIONS,
-    "ec2": EC2_ACTIONS,
-    "iam": IAM_ACTIONS,
+    "s3": {k.replace("_", "").replace("-", ""): v for k, v in S3_ACTIONS.items()},
+    "ec2": {k.replace("_", "").replace("-", ""): v for k, v in EC2_ACTIONS.items()},
+    "iam": {k.replace("_", "").replace("-", ""): v for k, v in IAM_ACTIONS.items()},
 }
 
 
@@ -129,7 +129,8 @@ def execute_plan(request: ExecuteRequest):
             }
 
         # --- Route to the correct action within the service ---
-        handler_fn = service_actions.get(request.action)
+        normalized_action = request.action.lower().replace("_", "").replace("-", "")
+        handler_fn = service_actions.get(normalized_action)
         if handler_fn is None:
             logger.warning(
                 "Unsupported action '%s' for service '%s'", request.action, request.service
