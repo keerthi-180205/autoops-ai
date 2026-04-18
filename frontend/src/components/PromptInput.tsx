@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, Loader2 } from 'lucide-react';
+import { ArrowUp, Loader2 } from 'lucide-react';
 
 interface PromptInputProps {
   onSubmit: (prompt: string) => void;
@@ -17,27 +17,47 @@ export const PromptInput: React.FC<PromptInputProps> = ({ onSubmit, isLoading })
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); }
+  };
+
   return (
-    <form onSubmit={handleSubmit} className="w-full max-w-2xl mx-auto space-y-4">
-      <div className="relative">
+    <form onSubmit={handleSubmit} className="mb-8">
+      <div
+        className="rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-indigo-400 transition-all"
+        style={{ background: 'var(--surface-1)', border: '1px solid var(--surface-3)' }}
+      >
+        {/* Label */}
+        <div className="px-4 pt-3 pb-1">
+          <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Prompt</span>
+        </div>
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="e.g. Create an S3 bucket named my-secure-bucket in us-east-1"
-          className="w-full bg-slate-800 text-white rounded-xl p-4 pr-16 min-h-[120px] resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-lg placeholder:text-slate-400"
+          onKeyDown={handleKeyDown}
+          placeholder="Describe your infrastructure needs..."
+          rows={2}
+          className="w-full bg-transparent text-[14px] px-4 pb-3 resize-none focus:outline-none placeholder:text-gray-400"
+          style={{ color: 'var(--text-primary)' }}
           disabled={isLoading}
         />
-        <button
-          type="submit"
-          disabled={!prompt.trim() || isLoading}
-          className="absolute bottom-4 right-4 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 text-white p-2 rounded-lg transition-colors flex items-center justify-center h-10 w-10 disabled:cursor-not-allowed"
+        <div
+          className="flex items-center justify-between px-4 py-2.5"
+          style={{ background: 'var(--surface-2)' }}
         >
-          {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-        </button>
+          <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
+            {isLoading ? 'Processing…' : 'Press Enter ↵ to send'}
+          </span>
+          <button
+            type="submit"
+            disabled={!prompt.trim() || isLoading}
+            className="px-4 py-1.5 rounded-md text-[13px] font-medium text-white flex items-center gap-2 transition-colors disabled:opacity-40"
+            style={{ background: 'var(--accent)' }}
+          >
+            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><span>Send</span><ArrowUp className="w-3.5 h-3.5" /></>}
+          </button>
+        </div>
       </div>
-      <p className="text-slate-400 text-sm text-center">
-        Type an infrastructure request in plain English, and the AutoOps agents will plan, estimate, validate, and execute it.
-      </p>
     </form>
   );
 };

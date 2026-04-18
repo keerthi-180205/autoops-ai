@@ -5,14 +5,12 @@ import { RequestHistory } from './components/RequestHistory';
 import { PastRequests } from './components/PastRequests';
 import { CostSummary } from './components/CostSummary';
 import { submitRequest } from './services/api';
-import { ServerCog } from 'lucide-react';
+import { Layers } from 'lucide-react';
 
-// Connect to the backend socket
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-// Initialize socket once, stripping /api if present for the base connection
 const socket = io(API_URL.replace('/api', ''), {
-  transports: ['websocket', 'polling'], // Fallback for stability
-  reconnection: true
+  transports: ['websocket', 'polling'],
+  reconnection: true,
 });
 
 function App() {
@@ -21,13 +19,8 @@ function App() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    socket.on('connect', () => {
-      console.log('Connected to WebSocket server');
-    });
-
-    return () => {
-      socket.off('connect');
-    };
+    socket.on('connect', () => console.log('WebSocket connected'));
+    return () => { socket.off('connect'); };
   }, []);
 
   const handlePromptSubmit = async (prompt: string) => {
@@ -36,55 +29,58 @@ function App() {
     try {
       const response = await submitRequest(prompt);
       setActiveRequestId(response.id);
-      
-      // Force room join. Using toString() for key consistency.
       socket.emit('join_request', String(response.id));
     } catch (err: any) {
       console.error(err);
-      setErrorMsg("Failed to reach the AutoOps backend. Is it running on port 5000?");
+      setErrorMsg('Could not reach the AUTOops backend. Is it running on port 5000?');
       setIsExecuting(false);
     }
   };
 
-  const handleExecutionComplete = () => {
-    setIsExecuting(false);
-  };
+  const handleExecutionComplete = () => setIsExecuting(false);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
-      <div className="max-w-6xl mx-auto px-4 py-12">
-        <header className="flex flex-col items-center justify-center mb-12 text-center">
-          <div className="bg-blue-600/20 p-4 rounded-2xl mb-4 border border-blue-500/30 shadow-[0_0_30px_-5px_rgba(37,99,235,0.3)]">
-            <ServerCog className="h-12 w-12 text-blue-400" />
+    <div className="min-h-screen" style={{ background: 'var(--surface-0)' }}>
+      {/* ── Indigo Header Bar (the 30% accent) ── */}
+      <header style={{ background: 'var(--accent)' }}>
+        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <Layers className="w-5 h-5 text-indigo-200" />
+            <span className="text-[16px] font-bold text-white tracking-tight">AUTOops</span>
           </div>
-          <h1 className="text-4xl md:text-5xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400 tracking-tight">
-            AUTOops Orchestrator
-          </h1>
-          <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
-            Natural language to zero-click AWS provisioning.
-            <br /> Powered by AI Planners & Deterministic Sub-Agents.
-          </p>
-        </header>
-
-        <main>
           <CostSummary />
+        </div>
+      </header>
 
-          {errorMsg && (
-            <div className="max-w-2xl mx-auto mb-6 bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-lg text-center">
-              {errorMsg}
-            </div>
-          )}
+      {/* ── Body content ── */}
+      <div className="max-w-6xl mx-auto px-6 py-8">
+        {/* Title */}
+        <div className="mb-6">
+          <h1 className="text-[22px] font-bold" style={{ color: 'var(--text-primary)' }}>Infrastructure Orchestrator</h1>
+          <p className="text-[14px] mt-1" style={{ color: 'var(--text-secondary)' }}>
+            Describe the AWS resources you need. The AI agents will plan, validate, price, and execute.
+          </p>
+        </div>
 
-          <PromptInput onSubmit={handlePromptSubmit} isLoading={isExecuting} />
-          
-          <RequestHistory 
-            activeRequestId={activeRequestId} 
-            onExecutionComplete={handleExecutionComplete} 
-            socket={socket}
-          />
+        {/* Error */}
+        {errorMsg && (
+          <div className="mb-5 px-4 py-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-[13px]">
+            {errorMsg}
+          </div>
+        )}
 
-          <PastRequests />
-        </main>
+        {/* Prompt */}
+        <PromptInput onSubmit={handlePromptSubmit} isLoading={isExecuting} />
+
+        {/* Active pipeline */}
+        <RequestHistory
+          activeRequestId={activeRequestId}
+          onExecutionComplete={handleExecutionComplete}
+          socket={socket}
+        />
+
+        {/* Past history */}
+        <PastRequests />
       </div>
     </div>
   );
