@@ -1,4 +1,4 @@
-version: "1.0"
+version: "3.8"
 
 services:
 
@@ -35,6 +35,11 @@ services:
 
   validation-agent:
     build: ../Agents/validation-agent
+    env_file:
+      - .env
+
+  mcp-server:
+    build: ../Agents/mcp-server
     env_file:
       - .env
 
